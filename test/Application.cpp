@@ -63,8 +63,37 @@ int main()
 		[&]() { return health <= 0 && !immortality; }
 	);
 
+	sm.BindOnStateLeave(States::ALIVE,
+		[&](States into) { println("(EVENT) Left {} and entered {}", States::ALIVE, into); }
+	);
+	/*sm.BindOnStateLeave(States::ALIVE,
+		[&](States into) { println("(EVENT) Just to be sure, Left {} and entered {}", States::ALIVE, into); }
+	);*/
+	sm.BindOnStateLeave(States::INJURED,
+		[&](States into) { println("(EVENT) Left {} and entered {}", States::INJURED, into); }
+	);
+	sm.BindOnStateLeave(States::DEAD,
+		[&](States into) { println("(EVENT) Left {} and entered {}", States::DEAD, into); }
+	);
+	sm.BindOnStateLeave(States::IMMORTAL,
+		[&](States into) { println("(EVENT) Left {} and entered {}", States::IMMORTAL, into); }
+	);
+
+	sm.BindOnStateEntry(States::ALIVE,
+		[&](States from) { println("(EVENT) Entered {} from {}", States::ALIVE, from); }
+	);
+	sm.BindOnStateEntry(States::INJURED,
+		[&](States from) { println("(EVENT) Entered {} from {}", States::INJURED, from); }
+	);
+	sm.BindOnStateEntry(States::DEAD,
+		[&](States from) { println("(EVENT) Entered {} from {}", States::DEAD, from); }
+	);
+	sm.BindOnStateEntry(States::IMMORTAL,
+		[&](States from) { println("(EVENT) Entered {} from {}", States::IMMORTAL, from); }
+	);
+
 	println("Starting with state: {}", sm.GetCurrentState());
-	println("Iterating 9 times to deduct health by 10 and then stepping");
+	println("Iterating 9 times to deduct health by 10 and then stepping\n");
 	for (int i = 0; i < 9; i++)
 	{
 		health -= 10;
