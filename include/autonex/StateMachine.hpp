@@ -28,7 +28,8 @@ namespace anx {
 
 	public:
 		StateMachine(state_t initialState) : m_CurrentState{ initialState } {}
-		// ToDo: Create move and copy constructors if required
+		
+		// No special member functions due to the Rule of Zero
 
 		state_t GetCurrentState() const;
 		void ForceSetCurrentState(state_t newState);
@@ -87,15 +88,17 @@ namespace anx {
 						it_l->second.Dispatch(newState);
 					}
 
+					// Remember and transit
+					auto oldState = m_CurrentState;
+					m_CurrentState = newState;
+
 					// Check and fire on entry events
-					if (auto it_e = m_OnStateEntryRegistry.find(newState);
+					if (auto it_e = m_OnStateEntryRegistry.find(m_CurrentState);
 						it_e != m_OnStateEntryRegistry.end())
 					{
-						it_e->second.Dispatch(m_CurrentState);
+						it_e->second.Dispatch(oldState);
 					}
 
-					// Transit
-					m_CurrentState = newState;
 					return true;
 				}
 			}

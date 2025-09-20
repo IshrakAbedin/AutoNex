@@ -18,10 +18,10 @@ struct std::formatter<States> : std::formatter<std::string> {
 	auto format(States st, std::format_context& ctx) const {
 		std::string s;
 		switch (st) {
-		case States::ALIVE:		s = "<Alive>";	break;
+		case States::ALIVE:		s = "<Alive>";		break;
 		case States::INJURED:	s = "<Injured>";	break;
 		case States::DEAD:		s = "<Dead>";		break;
-		case States::IMMORTAL:	s = "<Immortal>"; break;
+		case States::IMMORTAL:	s = "<Immortal>";	break;
 		default:				s = "<Unknown>";	break;
 		}
 		return std::formatter<std::string>::format(s, ctx);
