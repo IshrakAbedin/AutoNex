@@ -14,8 +14,8 @@ static void ObjectPoolExample();
 
 int main()
 {
+	//StateMachineExample();
 	ObjectPoolExample();
-
 	return 0;
 }
 

@@ -12,10 +12,8 @@ namespace anx {
 
 	public:
 		EventDispatcher() = default;
-		~EventDispatcher() = default;
-		EventDispatcher(const EventDispatcher& other) = delete;
-		EventDispatcher operator=(const EventDispatcher& other) = delete;
-		bool operator==(const EventDispatcher& other) = delete;
+		
+		// No special member functions due to the Rule of Zero
 
 		// Subscribe to event, operator overload +=
 		EventDispatcher& operator+=(const std::function<void(params...)> subscriber);
