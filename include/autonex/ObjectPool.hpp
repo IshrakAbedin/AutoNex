@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <deque>
 #include <optional>
 #include <functional>
 #include <cstddef> 
@@ -9,7 +10,12 @@
 #include <type_traits>
 
 namespace anx {
-	template <typename T>
+	enum class PoolAllocationStrategy
+	{
+		STATIC, DYNAMIC
+	};
+
+	template <typename T, PoolAllocationStrategy Strategy = PoolAllocationStrategy::STATIC>
 	class ObjectPool {
 	private:
 		struct alignas(T) Storage
@@ -17,7 +23,12 @@ namespace anx {
 			std::byte Data[sizeof(T)];
 		};
 
-		std::vector<Storage> m_Storage;
+		using container_t = std::conditional_t<
+			Strategy == PoolAllocationStrategy::STATIC,
+			std::vector<Storage>,
+			std::deque<Storage>>;
+
+		container_t m_Storage;
 		std::vector<uint64_t> m_Generations;
 		std::vector<uint8_t> m_Alive;
 		std::vector<uint32_t> m_FreeList;
@@ -29,7 +40,14 @@ namespace anx {
 			uint64_t Generation;
 		};
 
-		explicit ObjectPool(size_t reserveSize = 0);
+		template<PoolAllocationStrategy S = Strategy>
+			requires (S == PoolAllocationStrategy::STATIC)
+		explicit ObjectPool(size_t reserveSize);
+
+		template<PoolAllocationStrategy S = Strategy>
+			requires (S == PoolAllocationStrategy::DYNAMIC)
+		ObjectPool();
+
 		ObjectPool(const ObjectPool&) = delete;
 		ObjectPool& operator=(const ObjectPool&) = delete;
 		ObjectPool(ObjectPool&&) noexcept = default;
@@ -48,8 +66,10 @@ namespace anx {
 		size_t Size() const noexcept;
 	};
 
-	template<typename T>
-	inline ObjectPool<T>::ObjectPool(size_t reserveSize)
+	template<typename T, PoolAllocationStrategy Strategy>
+	template<PoolAllocationStrategy S>
+		requires (S == PoolAllocationStrategy::STATIC)
+	inline ObjectPool<T, Strategy>::ObjectPool(size_t reserveSize)
 	{
 		if (reserveSize > 0)
 		{
@@ -59,8 +79,16 @@ namespace anx {
 		}
 	}
 
-	template<typename T>
-	inline ObjectPool<T>::~ObjectPool()
+	template<typename T, PoolAllocationStrategy Strategy>
+	template<PoolAllocationStrategy S>
+		requires (S == PoolAllocationStrategy::DYNAMIC)
+	inline ObjectPool<T, Strategy>::ObjectPool()
+	{
+		// Empty as no reservation for std::deque
+	}
+
+	template<typename T, PoolAllocationStrategy Strategy>
+	inline ObjectPool<T, Strategy>::~ObjectPool()
 	{
 		if constexpr (!std::is_trivially_destructible_v<T>)
 		{
@@ -72,9 +100,9 @@ namespace anx {
 		}
 	}
 
-	template<typename T>
+	template<typename T, PoolAllocationStrategy Strategy>
 	template<typename ...Args>
-	inline ObjectPool<T>::Handle ObjectPool<T>::Create(Args && ...args)
+	inline ObjectPool<T, Strategy>::Handle ObjectPool<T, Strategy>::Create(Args && ...args)
 	{
 		uint32_t Index;
 		if (!m_FreeList.empty())
@@ -85,7 +113,7 @@ namespace anx {
 		}
 		else
 		{
-			Index = static_cast<uint32_t>(m_Storage.size());
+			Index = static_cast<decltype(Index)>(m_Storage.size());
 			m_Storage.emplace_back();  // raw storage for T
 			m_Generations.push_back(0);
 			m_Alive.push_back(0);
@@ -98,8 +126,8 @@ namespace anx {
 		return Handle{ Index, m_Generations[Index] };
 	}
 
-	template<typename T>
-	inline bool ObjectPool<T>::Destroy(Handle h)
+	template<typename T, PoolAllocationStrategy Strategy>
+	inline bool ObjectPool<T, Strategy>::Destroy(Handle h)
 	{
 		if (!Validate(h)) return false;
 
@@ -115,30 +143,30 @@ namespace anx {
 		return true;
 	}
 
-	template<typename T>
-	inline bool ObjectPool<T>::Validate(Handle h) const
+	template<typename T, PoolAllocationStrategy Strategy>
+	inline bool ObjectPool<T, Strategy>::Validate(Handle h) const
 	{
 		return h.Index < m_Storage.size() &&
 			m_Alive[h.Index] &&
 			m_Generations[h.Index] == h.Generation;
 	}
 
-	template<typename T>
-	inline std::optional<std::reference_wrapper<T>> ObjectPool<T>::Get(Handle h)
+	template<typename T, PoolAllocationStrategy Strategy>
+	inline std::optional<std::reference_wrapper<T>> ObjectPool<T, Strategy>::Get(Handle h)
 	{
 		if (!Validate(h)) return std::nullopt;
 		return *reinterpret_cast<T*>(&m_Storage[h.Index].Data);
 	}
 
-	template<typename T>
-	inline std::optional<std::reference_wrapper<const T>> ObjectPool<T>::Get(Handle h) const
+	template<typename T, PoolAllocationStrategy Strategy>
+	inline std::optional<std::reference_wrapper<const T>> ObjectPool<T, Strategy>::Get(Handle h) const
 	{
 		if (!Validate(h)) return std::nullopt;
 		return *reinterpret_cast<const T*>(&m_Storage[h.Index].Data);
 	}
 
-	template<typename T>
-	inline size_t ObjectPool<T>::Size() const noexcept
+	template<typename T, PoolAllocationStrategy Strategy>
+	inline size_t ObjectPool<T, Strategy>::Size() const noexcept
 	{
 		return m_Storage.size() - m_FreeList.size();
 	}

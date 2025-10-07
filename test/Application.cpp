@@ -224,7 +224,8 @@ void ObjectPoolExample()
 	// Example 2: Custom Struct with Destructor
 	// ============================================
 	println("{}", "--- Example 2: Custom Struct (Entity) ---");
-	anx::ObjectPool<Entity> entityPool;
+	// If using static allocation here, make sure to pre-reserve enough storage beforehand to prevent reallocation
+	anx::ObjectPool<Entity, anx::PoolAllocationStrategy::DYNAMIC> entityPool;
 
 	// Create entities
 	auto e1 = entityPool.Create(1, "Player");
@@ -268,7 +269,7 @@ void ObjectPoolExample()
 	// Example 3: Const Access
 	// ============================================
 	println("{}", "\n--- Example 3: Const Access ---");
-	const anx::ObjectPool<Entity>& constPool = entityPool;
+	const auto& constPool = entityPool;
 
 	if (auto opt = constPool.Get(e1)) {
 		const Entity& entity = opt->get();
