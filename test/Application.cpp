@@ -104,37 +104,37 @@ void StateMachineExample()
 	);
 
 	println("Starting with state: {}", sm.GetCurrentState());
-	println("Iterating 9 times to deduct health by 10 and then stepping\n");
+	println("{}", "Iterating 9 times to deduct health by 10 and then stepping\n");
 	for (int i = 0; i < 9; i++)
 	{
 		health -= 10;
 		println("Current health: {}", health);
 		if (i == 2)
 		{
-			println("Activating immortality");
+			println("{}", "Activating immortality");
 			immortality = true;
 		}
 		else if (i == 4)
 		{
-			println("Deactivating immortality");
+			println("{}", "Deactivating immortality");
 			immortality = false;
 		}
 		sm.Step();
 		println("Current state: {}\n", sm.GetCurrentState());
 	}
-	println("Iterating 10 times to increase health by 10 and then stepping");
+	println("{}", "Iterating 10 times to increase health by 10 and then stepping");
 	for (int i = 0; i < 10; i++)
 	{
 		health += 10;
 		println("Current health: {}", health);
 		if (i == 1)
 		{
-			println("Activating immortality");
+			println("{}", "Activating immortality");
 			immortality = true;
 		}
 		else if (i == 2)
 		{
-			println("Deactivating immortality");
+			println("{}", "Deactivating immortality");
 			immortality = false;
 		}
 		sm.Step();
