@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <new>
 #include <type_traits>
+#include <limits>
+#include <stdexcept>
 
 namespace anx {
 	enum class PoolAllocationStrategy
@@ -15,8 +17,9 @@ namespace anx {
 		STATIC, DYNAMIC
 	};
 
-	template <typename T, PoolAllocationStrategy Strategy = PoolAllocationStrategy::STATIC>
-	class ObjectPool {
+	template<typename T, PoolAllocationStrategy Strategy = PoolAllocationStrategy::STATIC>
+	class ObjectPool
+	{
 	private:
 		struct alignas(T) Storage
 		{
@@ -31,13 +34,44 @@ namespace anx {
 		container_t m_Storage;
 		std::vector<uint64_t> m_Generations;
 		std::vector<uint8_t> m_Alive;
-		std::vector<uint32_t> m_FreeList;
+
+		using index_t = uint32_t;
+		std::vector<index_t> m_FreeList;
 
 	public:
 		struct Handle
 		{
-			uint32_t Index;
+			friend class ObjectPool<T, Strategy>;
+
+		private:
+			index_t Index;
 			uint64_t Generation;
+
+			Handle(index_t index, uint64_t generation)
+				: Index{ index }, Generation{ generation }
+			{
+			}
+
+		public:
+			bool operator==(const Handle& other) const noexcept
+			{
+				return Index == other.Index && Generation == other.Generation;
+			}
+
+			bool operator!=(const Handle& other) const noexcept
+			{
+				return !(*this == other);
+			}
+
+			struct Hash
+			{
+				size_t operator()(const Handle& h) const noexcept
+				{
+					size_t seed = std::hash<index_t>{}(h.Index);
+					seed ^= std::hash<uint64_t>{}(h.Generation) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+					return seed;
+				}
+			};
 		};
 
 		template<PoolAllocationStrategy S = Strategy>
@@ -64,6 +98,8 @@ namespace anx {
 		std::optional<std::reference_wrapper<const T>> Get(Handle h) const;
 
 		size_t Size() const noexcept;
+		size_t Capacity() const noexcept;
+		size_t FreeSlotCount() const noexcept;
 	};
 
 	template<typename T, PoolAllocationStrategy Strategy>
@@ -92,8 +128,10 @@ namespace anx {
 	{
 		if constexpr (!std::is_trivially_destructible_v<T>)
 		{
-			for (size_t i = 0; i < m_Storage.size(); ++i) {
-				if (m_Alive[i]) {
+			for (size_t i = 0; i < m_Storage.size(); ++i)
+			{
+				if (m_Alive[i])
+				{
 					reinterpret_cast<T*>(&m_Storage[i].Data)->~T();
 				}
 			}
@@ -104,26 +142,39 @@ namespace anx {
 	template<typename ...Args>
 	inline ObjectPool<T, Strategy>::Handle ObjectPool<T, Strategy>::Create(Args && ...args)
 	{
-		uint32_t Index;
+		index_t Index;
 		if (!m_FreeList.empty())
 		{
 			Index = m_FreeList.back();
 			m_FreeList.pop_back();
-			m_Generations[Index]++; // invalidate old handles
 		}
 		else
 		{
-			Index = static_cast<decltype(Index)>(m_Storage.size());
-			m_Storage.emplace_back();  // raw storage for T
+			auto current_size = m_Storage.size();
+			if (current_size >= std::numeric_limits<index_t>::max())
+			{
+				throw std::overflow_error("ObjectPool: Maximum capacity reached (index overflow)");
+			}
+
+			Index = static_cast<index_t>(current_size);
+			m_Storage.emplace_back(); // raw storage for T
 			m_Generations.push_back(0);
 			m_Alive.push_back(0);
 		}
 
 		void* ptr = &m_Storage[Index].Data;
-		new (ptr) T(std::forward<Args>(args)...); // placement new
-		m_Alive[Index] = 1;
+		
+		try {
+			new (ptr) T(std::forward<Args>(args)...);
+			m_Alive[Index] = 1;
 
-		return Handle{ Index, m_Generations[Index] };
+			return Handle{ Index, m_Generations[Index] };
+		}
+		catch (...) {
+			// Rollback: return index to free list for future reuse
+			m_FreeList.push_back(Index);
+			throw; // Re-throw the exception
+		}
 	}
 
 	template<typename T, PoolAllocationStrategy Strategy>
@@ -155,19 +206,31 @@ namespace anx {
 	inline std::optional<std::reference_wrapper<T>> ObjectPool<T, Strategy>::Get(Handle h)
 	{
 		if (!Validate(h)) return std::nullopt;
-		return *reinterpret_cast<T*>(&m_Storage[h.Index].Data);
+		return std::ref(*reinterpret_cast<T*>(&m_Storage[h.Index].Data));
 	}
 
 	template<typename T, PoolAllocationStrategy Strategy>
 	inline std::optional<std::reference_wrapper<const T>> ObjectPool<T, Strategy>::Get(Handle h) const
 	{
 		if (!Validate(h)) return std::nullopt;
-		return *reinterpret_cast<const T*>(&m_Storage[h.Index].Data);
+		return std::cref(*reinterpret_cast<const T*>(&m_Storage[h.Index].Data));
 	}
 
 	template<typename T, PoolAllocationStrategy Strategy>
 	inline size_t ObjectPool<T, Strategy>::Size() const noexcept
 	{
 		return m_Storage.size() - m_FreeList.size();
+	}
+
+	template<typename T, PoolAllocationStrategy Strategy>
+	inline size_t ObjectPool<T, Strategy>::Capacity() const noexcept
+	{
+		return m_Storage.size();
+	}
+
+	template<typename T, PoolAllocationStrategy Strategy>
+	inline size_t ObjectPool<T, Strategy>::FreeSlotCount() const noexcept
+	{
+		return m_FreeList.size();
 	}
 } // namespace anx
