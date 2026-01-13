@@ -11,7 +11,7 @@ workspace "AutoNex"
 
    includedirs {
          "./test",
-	      "./include/autonex"
+	      "./include"
     }
 
    files { "**.h", "**.hpp", "**.cpp", "**.cc", "**.cx", "**.c" }
