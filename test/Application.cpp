@@ -1,21 +1,25 @@
 #include <iostream>
 #include <format>
-
 #include <string>
 #include <vector>
+#include <chrono>
+#include <thread>
 
-#include "StateMachine.hpp"
-#include "ObjectPool.hpp"
+#include "autonex/StateMachine.hpp"
+#include "autonex/ObjectPool.hpp"
+#include "autonex/Timer.hpp"
 
 #define println(fmt, ...) std::cout << std::format(fmt, __VA_ARGS__) <<std::endl
 
 static void StateMachineExample();
 static void ObjectPoolExample();
+static void TimerExample();
 
 int main()
 {
 	//StateMachineExample();
-	ObjectPoolExample();
+	//ObjectPoolExample();
+	TimerExample();
 	return 0;
 }
 
@@ -278,4 +282,185 @@ void ObjectPoolExample()
 
 	println("{}", "\n--- Cleanup (destructors called automatically) ---");
 	// When pools go out of scope, all remaining objects are properly destroyed
+}
+
+void TimerExample()
+{
+	using namespace anx;
+	using namespace std::chrono_literals;
+
+	println("{}", "=== Timer Demo ===\n");
+
+	// ============================================
+	// Setup: Create timer manager and counters
+	// ============================================
+	println("{}", "--- Creating Timer Manager ---");
+	TimerManager<PoolAllocationStrategy::STATIC> timerManager(10);
+
+	int oneSecondCounter = 0;
+	int fastCounter = 0;
+	int slowCounter = 0;
+	int singleShotCounter = 0;
+	int disablableCounter = 0;
+	bool recursiveTimerCreated = false;
+
+	// ============================================
+	// Example 1: Basic Repeating Timer (1s)
+	// ============================================
+	println("{}", "\n--- Example 1: Repeating Timer (1s interval) ---");
+	auto timer1s = timerManager.CreateTimer(
+		1s,
+		true,  // repeating
+		[&oneSecondCounter]() {
+			println("[1s Timer] Fired! Count: {}", ++oneSecondCounter);
+		},
+		true   // enabled
+	);
+	println("{}", "Created 1-second repeating timer");
+
+	// ============================================
+	// Example 2: Fast Repeating Timer (100ms)
+	// ============================================
+	println("{}", "\n--- Example 2: Fast Repeating Timer (100ms interval) ---");
+	auto timerFast = timerManager.CreateTimer(
+		100ms,
+		true,
+		[&fastCounter]() {
+			fastCounter++;
+			if (fastCounter % 10 == 0) {
+				println("[100ms Timer] Fired 10 times! Total: {}", fastCounter);
+			}
+		}
+	);
+	println("{}", "Created 100ms repeating timer (reports every 10 fires)");
+
+	// ============================================
+	// Example 3: Slow Repeating Timer (2.5s)
+	// ============================================
+	println("{}", "\n--- Example 3: Slow Repeating Timer (2.5s interval) ---");
+	auto timerSlow = timerManager.CreateTimer(
+		2500ms,
+		true,
+		[&slowCounter]() {
+			println("[2.5s Timer] Fired! Count: {}", ++slowCounter);
+		}
+	);
+	println("{}", "Created 2.5-second repeating timer");
+
+	// ============================================
+	// Example 4: Single-Shot Timer (3s)
+	// ============================================
+	println("{}", "\n--- Example 4: Single-Shot Timer (fires once at 3s) ---");
+	auto timerSingleShot = timerManager.CreateTimer(
+		3s,
+		false,  // NOT repeating
+		[&singleShotCounter]() {
+			println("{}", "[Single-Shot Timer] Fired once at 3 seconds!");
+			singleShotCounter++;
+		}
+	);
+	println("{}", "Created single-shot timer (auto-destroys after firing)");
+
+	// ============================================
+	// Example 5: Enable/Disable Control (500ms)
+	// ============================================
+	println("{}", "\n--- Example 5: Timer with Enable/Disable Control ---");
+	auto timerDisablable = timerManager.CreateTimer(
+		500ms,
+		true,
+		[&disablableCounter]() {
+			println("[Disablable Timer] Fired! Count: {}", ++disablableCounter);
+		}
+	);
+	println("{}", "Created 500ms timer (will be disabled at 5s, re-enabled at 7s)");
+
+	// ============================================
+	// Example 6: Recursive Timer Creation
+	// ============================================
+	println("{}", "\n--- Example 6: Timer Creating Another Timer ---");
+	auto timerRecursive = timerManager.CreateTimer(
+		4s,
+		false,
+		[&timerManager, &recursiveTimerCreated]() {
+			println("{}", "[Recursive Timer] Creating child timer from callback!");
+			timerManager.CreateTimer(
+				500ms,
+				false,
+				[]() {
+					println("{}", "  [Child Timer] Fired from parent callback!");
+				}
+			);
+			recursiveTimerCreated = true;
+		}
+	);
+	println("{}", "Created recursive timer (spawns child at 4s)");
+
+	// ============================================
+	// Main Loop: 1000 TPS for 10 seconds
+	// ============================================
+	println("{}", "\n--- Starting Main Loop ---");
+	println("{}", "Running at 1000 TPS (1ms per tick) for 10 seconds...\n");
+
+	const int TICKS_PER_SECOND = 1000;
+	const auto TICK_DURATION = std::chrono::microseconds(1000000 / TICKS_PER_SECOND);
+	const int TOTAL_SECONDS = 10;
+	const int TOTAL_TICKS = TICKS_PER_SECOND * TOTAL_SECONDS;
+
+	auto startTime = std::chrono::steady_clock::now();
+	auto nextTickTime = startTime;
+
+	for (int tick = 0; tick < TOTAL_TICKS; ++tick)
+	{
+		nextTickTime += TICK_DURATION;
+		timerManager.Tick();
+
+		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now() - startTime
+		).count();
+
+		// Disable timer at 5 seconds
+		if (elapsed >= 5000 && elapsed < 5100 && timerDisablable.IsEnabled())
+		{
+			println("{}", "\n(ACTION) Disabling 500ms timer at 5 seconds\n");
+			timerDisablable.Disable();
+		}
+
+		// Re-enable timer at 7 seconds
+		if (elapsed >= 7000 && elapsed < 7100 && !timerDisablable.IsEnabled())
+		{
+			println("{}", "\n(ACTION) Re-enabling 500ms timer at 7 seconds\n");
+			timerDisablable.Enable();
+		}
+
+		std::this_thread::sleep_until(nextTickTime);
+	}
+
+	auto endTime = std::chrono::steady_clock::now();
+	auto actualDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+		endTime - startTime
+	).count();
+
+	// ============================================
+	// Results Summary
+	// ============================================
+	println("{}", "\n--- Test Results ---");
+	println("Actual runtime: {}ms", actualDuration);
+	println("Target runtime: {}ms", TOTAL_SECONDS * 1000);
+	println("Timing accuracy: {}ms drift", actualDuration - TOTAL_SECONDS * 1000);
+
+	println("{}", "\nTimer Fire Counts:");
+	println("  1s Timer: {} times (expected: ~10)", oneSecondCounter);
+	println("  100ms Timer: {} times (expected: ~100)", fastCounter);
+	println("  2.5s Timer: {} times (expected: ~4)", slowCounter);
+	println("  Single-Shot Timer: {} time (expected: 1)", singleShotCounter);
+	println("  Disablable Timer: {} times (expected: ~15)", disablableCounter);
+	println("  Recursive timer created child: {}", recursiveTimerCreated ? "Yes" : "No");
+
+	println("{}", "\nTimer Handler States:");
+	println("  timer1s - valid: {}, enabled: {}", timer1s.IsValid(), timer1s.IsEnabled());
+	println("  timerFast - valid: {}, enabled: {}", timerFast.IsValid(), timerFast.IsEnabled());
+	println("  timerSingleShot - valid: {} (should be false - auto-destroyed)", timerSingleShot.IsValid());
+	println("  timerDisablable - valid: {}, enabled: {}", timerDisablable.IsValid(), timerDisablable.IsEnabled());
+
+	println("{}", "\n--- Cleanup (timers destroyed automatically) ---");
 }
