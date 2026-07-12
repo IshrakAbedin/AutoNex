@@ -1,6 +1,6 @@
 # AutoNex
 
-## A template library collection in C++20 providing modern and flexible implementation of state-machine, event dispatcher, object pool, timer, etc. for creating engines
+## A template library collection in C++20 providing modern and flexible implementation of state-machine, event dispatcher, object pool, timer, concurrency containers, etc. for creatingr real-time engines
 
 This library is a work in progress. New functionalities will be added via separate branches until they get merged with the master branch.
 
@@ -12,4 +12,4 @@ Copy the [`include`](./include/) folder into your project. Add the folder to you
 As of now, the library does not have any external dependency. Only C++20 and its STL are required.
 
 ### Testing
-While the functionalities of the libraries are tested, I cannot promise that bugs or memory leaks are non-existent. The tests are initially performed in Visual Studio 2022 with both MSVC and Clang. Then they are tested in Linux systems with GCC.
+While the functionalities of the libraries are tested, I cannot promise that bugs or memory leaks are non-existent. The tests are initially performed in Visual Studio 2026 with both MSVC and Clang. Then they are tested in Linux systems with GCC.
