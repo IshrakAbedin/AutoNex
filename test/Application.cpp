@@ -8,18 +8,21 @@
 #include "autonex/StateMachine.hpp"
 #include "autonex/ObjectPool.hpp"
 #include "autonex/Timer.hpp"
+#include "autonex/TripleBuffer.hpp"
 
 #define println(fmt, ...) std::cout << std::format(fmt, __VA_ARGS__) <<std::endl
 
 static void StateMachineExample();
 static void ObjectPoolExample();
 static void TimerExample();
+static void TripleBufferExample();
 
 int main()
 {
 	//StateMachineExample();
 	//ObjectPoolExample();
-	TimerExample();
+	//TimerExample();
+	TripleBufferExample();
 	return 0;
 }
 
@@ -463,4 +466,38 @@ void TimerExample()
 	println("  timerDisablable - valid: {}, enabled: {}", timerDisablable.IsValid(), timerDisablable.IsEnabled());
 
 	println("{}", "\n--- Cleanup (timers destroyed automatically) ---");
+}
+
+static void TripleBufferExample()
+{
+	using namespace std::chrono_literals;
+
+	anx::TripleBuffer<std::string> string_buffer;
+
+	auto producer = std::jthread{ [&]() {
+		for (int i = 0; i < 10; i++)
+		{
+			string_buffer.GetWriteBuffer() = "Publishing value: " + std::to_string(i);
+			string_buffer.Publish();
+			std::this_thread::sleep_for(50ms);
+		}
+	} };
+
+	auto consumer = std::jthread{ [&]() {
+		int value_read = 0;
+		while (value_read < 10)
+		{
+			auto has_value = string_buffer.CheckNew();
+			if (has_value)
+			{
+				std::string value = string_buffer.GetReadBuffer();
+				std::cout << '[' << ++value_read << ']' << " Read value: " << value << std::endl;
+			}
+			else
+			{
+				std::cout << "No new value found" << std::endl;
+			}
+			std::this_thread::sleep_for(20ms);
+		}
+	} };
 }

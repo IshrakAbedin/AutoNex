@@ -2,6 +2,7 @@ bin/*
 obj/*
 premake/*
 *.sln
+*.slnx
 *.vcxproj*
 .vs/*
 *.make
